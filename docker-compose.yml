@@ -1,0 +1,45 @@
+services:
+  db:
+    image: postgres:16-alpine
+    env_file: .env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+
+  backend:
+    build: ./backend
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db # внутри сети compose БД доступна по имени сервиса
+      POSTGRES_PORT: "5432"
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      ENABLE_DEV_ENDPOINTS: "${ENABLE_DEV_ENDPOINTS:-0}"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_DEV_TOOLS: "${VITE_DEV_TOOLS:-0}" 
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:
